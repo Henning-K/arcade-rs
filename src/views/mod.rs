@@ -1,65 +1,164 @@
 // views/mod.rs
 
 use phi::{Phi, View, ViewAction};
+use phi::data::Rectangle;
+
 use sdl2::pixels::Color;
 
-pub struct DefaultView;
+// Constants
+/// Pixels traveled by the player's ship every second, when it is moving.
+const PLAYER_SPEED: f64 = 180.0;
 
-impl View for DefaultView {
-    fn render(&mut self, context: &mut Phi, _: f64) -> ViewAction {
-        let renderer = &mut context.renderer;
-        let events = &context.events;
+// Data types
 
-        if events.now.quit || events.now.key_escape == Some(true) {
+struct Ship {
+    rect: Rectangle,
+}
+
+pub struct ShipView {
+    player: Ship,
+}
+
+impl ShipView {
+    pub fn new(phi: &mut Phi) -> Self {
+        ShipView {
+            player: Ship {
+                rect: Rectangle {
+                    x: 64.0,
+                    y: 64.0,
+                    w: 32.0,
+                    h: 32.0,
+                },
+            },
+        }
+    }
+}
+
+impl View for ShipView {
+    fn render(&mut self, phi: &mut Phi, elapsed: f64) -> ViewAction {
+        if phi.events.now.quit || phi.events.now.key_escape == Some(true) {
             return ViewAction::Quit;
         }
 
-        renderer.set_draw_color(Color::RGB(0, 0, 0));
-        renderer.clear();
+        // Move the player's ship
+        let diagonal = (phi.events.key_up ^ phi.events.key_down) &&
+                       (phi.events.key_left ^ phi.events.key_right);
+
+        let moved = if diagonal {
+            1.0 / 2.0f64.sqrt()
+        } else {
+            1.0
+        } * PLAYER_SPEED * elapsed;
+
+        let dx = match (phi.events.key_left, phi.events.key_right) {
+            (true, true) | (false, false) => 0.0,
+            (true, false) => -moved,
+            (false, true) => moved,
+        };
+
+        let dy = match (phi.events.key_up, phi.events.key_down) {
+            (true, true) | (false, false) => 0.0,
+            (true, false) => -moved,
+            (false, true) => moved,
+        };
+
+        self.player.rect.x += dx;
+        self.player.rect.y += dy;
+
+        // The movable region spans the entire height of the window and 70% of its width.
+        // This way, the player cannot get to the far right of the screen, where we will spawn
+        // the asteroids, and get immediately eliminated.
+        //
+        // We restrain the width because most screens are wider than they are high.
+        let movable_region = Rectangle {
+            x: 0.0,
+            y: 0.0,
+            w: phi.output_size().0 * 0.70,
+            h: phi.output_size().1,
+        };
+
+        // If the player cannot fit in the screen, there is a problem and the game should be
+        // promptly aborted.
+        self.player.rect = self.player
+                               .rect
+                               .move_inside(movable_region)
+                               .expect("Couldn't move player to fit in window. Perhaps the \
+                                        window is too small to fit the player?");
+
+        // Clear the screen
+        phi.renderer.set_draw_color(Color::RGB(0, 0, 0));
+        phi.renderer.clear();
+
+        // Render the scene
+        phi.renderer.set_draw_color(Color::RGB(200, 200, 50));
+        phi.renderer.fill_rect(self.player.rect.to_sdl()).expect("Filling Rectangle failed.");
 
         ViewAction::None
     }
 }
 
-pub struct ViewA;
-pub struct ViewB;
+// old:
 
-impl View for ViewA {
-    fn render(&mut self, context: &mut Phi, _: f64) -> ViewAction {
-        let renderer = &mut context.renderer;
-        let events = &context.events;
 
-        if events.now.key_space == Some(true) {
-            return ViewAction::ChangeView(Box::new(ViewB));
-        }
+// View definition
 
-        if events.now.quit || events.now.key_escape == Some(true) {
-            return ViewAction::Quit;
-        }
+// pub struct DefaultView;
 
-        renderer.set_draw_color(Color::RGB(255, 0, 0));
-        renderer.clear();
+// impl View for DefaultView {
+//     fn render(&mut self, context: &mut Phi, _: f64) -> ViewAction {
+//         let renderer = &mut context.renderer;
+//         let events = &context.events;
 
-        ViewAction::None
-    }
-}
+//         if events.now.quit || events.now.key_escape == Some(true) {
+//             return ViewAction::Quit;
+//         }
 
-impl View for ViewB {
-    fn render(&mut self, context: &mut Phi, _: f64) -> ViewAction {
-        let renderer = &mut context.renderer;
-        let events = &context.events;
+//         renderer.set_draw_color(Color::RGB(0, 0, 0));
+//         renderer.clear();
 
-        if events.now.key_space == Some(true) {
-            return ViewAction::ChangeView(Box::new(ViewA));
-        }
+//         ViewAction::None
+//     }
+// }
 
-        if events.now.quit || events.now.key_escape == Some(true) {
-            return ViewAction::Quit;
-        }
+// pub struct ViewA;
+// pub struct ViewB;
 
-        renderer.set_draw_color(Color::RGB(0, 0, 255));
-        renderer.clear();
+// impl View for ViewA {
+//     fn render(&mut self, context: &mut Phi, _: f64) -> ViewAction {
+//         let renderer = &mut context.renderer;
+//         let events = &context.events;
 
-        ViewAction::None
-    }
-}
+//         if events.now.key_space == Some(true) {
+//             return ViewAction::ChangeView(Box::new(ViewB));
+//         }
+
+//         if events.now.quit || events.now.key_escape == Some(true) {
+//             return ViewAction::Quit;
+//         }
+
+//         renderer.set_draw_color(Color::RGB(255, 0, 0));
+//         renderer.clear();
+
+//         ViewAction::None
+//     }
+// }
+
+// impl View for ViewB {
+//     fn render(&mut self, context: &mut Phi, _: f64) -> ViewAction {
+//         let renderer = &mut context.renderer;
+//         let events = &context.events;
+
+//         if events.now.key_space == Some(true) {
+//             return ViewAction::ChangeView(Box::new(ViewA));
+//         }
+
+//         if events.now.quit || events.now.key_escape == Some(true) {
+//             return ViewAction::Quit;
+//         }
+
+//         renderer.set_draw_color(Color::RGB(0, 0, 255));
+//         renderer.clear();
+
+//         ViewAction::None
+//     }
+// }
